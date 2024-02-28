@@ -1211,18 +1211,22 @@ class SentenceTransformer(nn.Sequential):
         """
         Get torch.device from module, assuming that the whole module has one device.
         """
-        try:
-            return next(self.parameters()).device
-        except StopIteration:
-            # For nn.DataParallel compatibility in PyTorch 1.5
+        if os.environ.get("USE_OPENVINO") == "1":
+            device = torch.device("cpu")
+        else:
+            try:
+                device = next(self.parameters()).device
+            except StopIteration:
+                # For nn.DataParallel compatibility in PyTorch 1.5
 
-            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
-                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-                return tuples
+                def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
+                    tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+                    return tuples
 
-            gen = self._named_members(get_members_fn=find_tensor_attributes)
-            first_tuple = next(gen)
-            return first_tuple[1].device
+                gen = self._named_members(get_members_fn=find_tensor_attributes)
+                first_tuple = next(gen)
+                device = first_tuple[1].device
+        return device
 
     @property
     def tokenizer(self):

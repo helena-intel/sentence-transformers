@@ -26,6 +26,7 @@ setup(
         "scipy",
         "huggingface-hub>=0.15.1",
         "Pillow",
+        "optimum-intel[openvino]>=0.15.0",
     ],
     classifiers=[
         "Development Status :: 5 - Production/Stable",

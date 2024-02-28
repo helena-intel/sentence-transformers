@@ -1,5 +1,6 @@
 from torch import nn
 from transformers import AutoModel, AutoTokenizer, AutoConfig, T5Config, MT5Config
+from optimum.intel import OVModelForFeatureExtraction
 import json
 from typing import List, Dict, Optional, Union, Tuple
 import os
@@ -62,9 +63,14 @@ class Transformer(nn.Module):
         elif isinstance(config, MT5Config):
             self._load_mt5_model(model_name_or_path, config, cache_dir, **model_args)
         else:
-            self.auto_model = AutoModel.from_pretrained(
-                model_name_or_path, config=config, cache_dir=cache_dir, **model_args
-            )
+            if os.environ.get("USE_OPENVINO") == "1":
+                self.auto_model = OVModelForFeatureExtraction.from_pretrained(
+                        model_name_or_path, export=True, config=config, cache_dir=cache_dir, **model_args
+                )
+            else:
+                self.auto_model = AutoModel.from_pretrained(
+                    model_name_or_path, config=config, cache_dir=cache_dir, **model_args
+                )
 
     def _load_t5_model(self, model_name_or_path, config, cache_dir, **model_args):
         """Loads the encoder model from T5"""
