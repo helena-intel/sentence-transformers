@@ -1471,7 +1471,6 @@ class SentenceTransformer(nn.Sequential, FitMixin):
                     kwargs["tokenizer_args"].update(tokenizer_kwargs)
                 if config_kwargs:
                     kwargs["config_args"].update(config_kwargs)
-
                 module = Transformer(model_name_or_path, cache_dir=cache_folder, **kwargs)
             else:
                 # Normalize does not require any files to be loaded

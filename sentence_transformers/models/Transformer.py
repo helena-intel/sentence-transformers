@@ -74,18 +74,15 @@ class Transformer(nn.Module):
         if tokenizer_name_or_path is not None:
             self.auto_model.config.tokenizer_class = self.tokenizer.__class__.__name__
 
-    def _load_model(self, model_name_or_path, config, cache_dir, **model_args):
+    def _load_model(self, model_name_or_path, cache_dir, **model_args):
         """Loads the transformer model"""
+        config = AutoConfig.from_pretrained(model_name_or_path, cache_dir=cache_dir)
         if isinstance(config, T5Config):
             self._load_t5_model(model_name_or_path, config, cache_dir, **model_args)
         elif isinstance(config, MT5Config):
             self._load_mt5_model(model_name_or_path, config, cache_dir, **model_args)
         else:
-            if "torch_dtype" not in model_args:
-                model_args["torch_dtype"] = "auto"
-            self.auto_model = AutoModel.from_pretrained(
-                model_name_or_path, config=config, cache_dir=cache_dir, **model_args
-            )
+            self.auto_model = AutoModel.from_pretrained(model_name_or_path, cache_dir=cache_dir, **model_args)
 
     def _load_t5_model(self, model_name_or_path, config, cache_dir, **model_args):
         """Loads the encoder model from T5"""
