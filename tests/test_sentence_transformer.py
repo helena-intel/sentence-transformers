@@ -8,6 +8,7 @@ import os
 import re
 import tempfile
 from functools import partial
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Union, cast
 
@@ -382,48 +383,6 @@ def test_load_with_model_kwargs(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA must be available to test float16 support.")
-def test_load_with_torch_dtype() -> None:
-    model = SentenceTransformer("sentence-transformers-testing/stsb-bert-tiny-safetensors")
-
-    assert model.encode(["Hello there!"], convert_to_tensor=True).dtype == torch.float32
-
-    with tempfile.TemporaryDirectory() as tmp_folder:
-        fp16_model_dir = Path(tmp_folder) / "fp16_model"
-        model.half()
-        model.save(str(fp16_model_dir))
-        del model
-
-        fp16_model = SentenceTransformer(
-            str(fp16_model_dir),
-            model_kwargs={"torch_dtype": "auto"},
-        )
-        assert fp16_model.encode(["Hello there!"], convert_to_tensor=True).dtype == torch.float16
-
-
-def test_load_with_model_kwargs(monkeypatch: pytest.MonkeyPatch) -> None:
-    transformer_kwargs = {}
-    original_transformer_init = Transformer.__init__
-
-    def transformers_init(*args, **kwargs):
-        nonlocal transformer_kwargs
-        nonlocal original_transformer_init
-        transformer_kwargs = kwargs
-        return original_transformer_init(*args, **kwargs)
-
-    monkeypatch.setattr(Transformer, "__init__", transformers_init)
-
-    SentenceTransformer(
-        "sentence-transformers-testing/stsb-bert-tiny-safetensors",
-        model_kwargs={"attn_implementation": "eager", "low_cpu_mem_usage": False},
-    )
-
-    assert "low_cpu_mem_usage" in transformer_kwargs["model_args"]
-    assert transformer_kwargs["model_args"]["low_cpu_mem_usage"] is False
-    assert "attn_implementation" in transformer_kwargs["model_args"]
-    assert transformer_kwargs["model_args"]["attn_implementation"] == "eager"
-
-
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA must be available to test float16 support.")
 def test_encode_fp16() -> None:
     tiny_model = SentenceTransformer("sentence-transformers-testing/stsb-bert-tiny-safetensors")
     tiny_model.half()
@@ -606,3 +565,37 @@ def test_similarity_score_save(stsb_bert_tiny_model: SentenceTransformer) -> Non
     assert loaded_model.similarity_fn_name == "euclidean"
     dot_scores = model.similarity(embeddings, embeddings)
     assert np.not_equal(cosine_scores, dot_scores).all()
+
+
+@pytest.mark.skipif(
+    find_spec("openvino") is None or find_spec("optimum.intel") is None,
+    reason="optimum-intel and openvino must be installed for OpenVINO test",
+)
+def test_openvino_backend() -> None:
+    pytorch_model = SentenceTransformer("sentence-transformers-testing/stsb-bert-tiny-safetensors")
+    openvino_model = SentenceTransformer(
+        "sentence-transformers-testing/stsb-bert-tiny-safetensors",
+        backend="openvino",
+        model_kwargs={"ov_config": {"INFERENCE_PRECISION_HINT": "f32"}},
+    )
+
+    # Test that OpenVINO output is close to PyTorch output
+    pytorch_result = pytorch_model.encode(["Hello there!"])
+    openvino_result = openvino_model.encode(["Hello there!"])
+    assert np.allclose(openvino_result, pytorch_result, atol=0.000001)
+
+    # Test that loading with ov_config file works as expected
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        config_file = str(Path(tmpdirname) / "ov_config.json")
+        with open(Path(config_file), "w") as f:
+            f.write('{"NUM_STREAMS" : "2"}')
+        openvino_model_with_config = SentenceTransformer(
+            "sentence-transformers-testing/stsb-bert-tiny-safetensors",
+            backend="openvino",
+            model_kwargs={"ov_config": config_file},
+        )
+
+        transformers_model = next(
+            module for module in openvino_model_with_config.modules() if isinstance(module, Transformer)
+        )
+        assert transformers_model.auto_model.request.get_property("NUM_STREAMS") == 2
