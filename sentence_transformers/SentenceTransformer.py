@@ -159,6 +159,9 @@ class SentenceTransformer(nn.Sequential, FitMixin):
         tokenizer_kwargs: Optional[Dict[str, Any]] = None,
         config_kwargs: Optional[Dict[str, Any]] = None,
         model_card_data: Optional[SentenceTransformerModelCardData] = None,
+        torch_dtype: Optional[Union[str, torch.dtype]] = None,
+        attn_implementation: Optional[Literal["eager", "sdpa", "flash_attention_2"]] = None,
+        **model_kwargs,
     ):
         # Note: self._load_sbert_model can also update `self.prompts` and `self.default_prompt_name`
         self.prompts = prompts or {}
